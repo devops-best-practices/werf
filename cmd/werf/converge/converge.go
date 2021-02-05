@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/werf/werf/pkg/deploy/helm2"
+
 	"github.com/werf/werf/pkg/giterminism_manager"
 
 	"github.com/werf/werf/pkg/deploy/helm/command_helpers"
@@ -311,6 +313,27 @@ func run(ctx context.Context, giterminismManager giterminism_manager.Interface) 
 	namespace, err := common.GetKubernetesNamespace(*commonCmdData.Namespace, *commonCmdData.Environment, werfConfig)
 	if err != nil {
 		return err
+	}
+
+	helm2MaintenanceHelper := helm2.NewMaintenanceHelper(helm2.MaintenanceHelperOptions{})
+	if available, err := helm2MaintenanceHelper.CheckStorageAvailable(); err != nil {
+		return err
+	} else if available {
+		existingReleases, err := helm2MaintenanceHelper.GetReleasesList()
+		if err != nil {
+			return fmt.Errorf("error getting existing helm 2 releases to perform check: %s", err)
+		}
+		for _, existingReleaseName := range existingReleases {
+			if releaseName == existingReleaseName {
+				return fmt.Errorf(`found existing helm 2 release with the same name %q: cannot continue converge
+
+Please migrate your existing release to helm 3 with the following command:
+
+    werf helm migrate2to3 --release %s --namespace %s
+
+`, releaseName, releaseName, namespace)
+			}
+		}
 	}
 
 	userExtraAnnotations, err := common.GetUserExtraAnnotations(&commonCmdData)
